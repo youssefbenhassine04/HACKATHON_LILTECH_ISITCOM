@@ -29,14 +29,18 @@ export function securityHeaders(): RequestHandler {
       directives: {
         'default-src': ["'self'"],
         'script-src': ["'self'"],
-        'style-src': ["'self'", "'unsafe-inline'"],
+        // The UI loads the Cairo typeface from Google Fonts.
+        'style-src': ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         'img-src': ["'self'", 'data:', 'blob:'],
-        'font-src': ["'self'", 'data:'],
-        'connect-src': ["'self'"],
+        'font-src': ["'self'", 'data:', 'https://fonts.gstatic.com'],
+        // Reverse geocoding used by the location picker.
+        'connect-src': ["'self'", 'https://nominatim.openstreetmap.org'],
         'object-src': ["'none'"],
         'base-uri': ["'self'"],
         'form-action': ["'self'"],
         'frame-ancestors': ["'none'"],
+        // Map preview embeds (OpenStreetMap) and the Google Maps deep link.
+        'frame-src': ["'self'", 'https://www.openstreetmap.org', 'https://www.google.com'],
       },
     },
     crossOriginResourcePolicy: { policy: 'same-site' },

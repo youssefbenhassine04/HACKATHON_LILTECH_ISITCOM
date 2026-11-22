@@ -8,7 +8,7 @@ import {
   exportAllData,
   importAllData,
 } from '../lib/store';
-import { apiGetUsers, apiSaveUser, apiDeleteUser } from '../lib/api';
+import { apiGetUsers, apiSaveUser, apiDeleteUser, apiGetAuditLog, type AuditEntry } from '../lib/api';
 import { Settings as SettingsType, User as UserType, UserRole } from '../types';
 import {
   Settings as SettingsIcon,
@@ -25,15 +25,42 @@ import {
   CheckCircle2,
   AlertCircle,
   Shield,
-  KeyRound,
+  History,
 } from 'lucide-react';
+
+const AUDIT_LABELS: Record<string, string> = {
+  login_success: 'دخول ناجح',
+  login_failed: 'محاولة دخول فاشلة',
+  logout: 'تسجيل خروج',
+  password_changed: 'تغيير كلمة مرور',
+  password_change_failed: 'فشل تغيير كلمة مرور',
+  user_created: 'إنشاء حساب',
+  user_updated: 'تعديل حساب',
+  user_deleted: 'حذف حساب',
+  settings_updated: 'تعديل الإعدادات',
+  violation_created: 'إنشاء محضر',
+  violation_updated: 'تعديل محضر',
+  violation_reviewed: 'اعتماد محضر',
+  violation_reopened: 'إرجاع محضر للتدقيق',
+  violator_saved: 'حفظ مخالف',
+  demo_data_reset: 'إعادة ضبط البيانات',
+  db_test: 'اختبار قاعدة البيانات',
+  db_reconnect: 'تغيير قاعدة البيانات',
+};
 
 export const Settings: React.FC = () => {
   const { user } = useAuth();
   const [settings, setSettingsState] = useState<SettingsType>(getSettings());
   const [usersList, setUsersList] = useState<UserType[]>(getUsers());
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
 
   // The server is the source of truth for accounts (no passwords in the browser).
+  useEffect(() => {
+    apiGetAuditLog(30)
+      .then(setAuditLog)
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     apiGetUsers()
@@ -654,6 +681,36 @@ export const Settings: React.FC = () => {
             <span>إعادة ضبط البيانات التجريبية الافتراضية</span>
           </button>
         </div>
+      </section>
+
+      {/* SECTION 7: SECURITY AUDIT TRAIL */}
+      <section className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
+        <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-2">
+          <History className="w-4 h-4 text-primary" />
+          <span>7. سجل الأحداث الأمنية (آخر 30)</span>
+        </h2>
+
+        {auditLog.length === 0 ? (
+          <p className="text-xs text-slate-500">لا توجد أحداث مسجلة بعد.</p>
+        ) : (
+          <ul className="divide-y divide-slate-100">
+            {auditLog.map((entry) => (
+              <li key={entry.id} className="py-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-800 truncate">
+                    {AUDIT_LABELS[entry.action] || entry.action}
+                    {entry.target ? ` — ${entry.target}` : ''}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    {entry.actor || 'غير معروف'} • {new Date(entry.at).toLocaleString('ar-TN')}
+                    {entry.ip ? ` • ${entry.ip}` : ''}
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono text-slate-400 flex-shrink-0">#{entry.id}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

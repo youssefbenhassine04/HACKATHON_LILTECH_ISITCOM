@@ -243,6 +243,16 @@ export const dbUrlSchema = z.object({
     .regex(/^postgres(ql)?:\/\/\S+$/i, { message: 'رابط قاعدة البيانات يجب أن يبدأ بـ postgresql://' }),
 });
 
+export const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: z.string().min(8).max(128),
+});
+
+export const auditQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+
 export const idParamsSchema = z.object({ id: identifier });
 export const usernameParamsSchema = z.object({ username: z.string().trim().min(1).max(50) });
 

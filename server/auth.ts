@@ -110,6 +110,13 @@ export async function deleteSession(token: string): Promise<void> {
   await pool.query('DELETE FROM sessions WHERE token_hash = $1', [hashToken(token)]);
 }
 
+/** Revokes every session for a user except the one making the request. */
+export async function revokeOtherSessions(username: string, keepToken: string | undefined): Promise<void> {
+  if (!isPostgresConnected || !pool) return;
+  if (!keepToken) return deleteSessionsForUser(username);
+  await pool.query('DELETE FROM sessions WHERE username = $1 AND token_hash <> $2', [username, hashToken(keepToken)]);
+}
+
 export async function deleteSessionsForUser(username: string): Promise<void> {
   if (!isPostgresConnected || !pool) return;
   await pool.query('DELETE FROM sessions WHERE username = $1', [username]);
@@ -249,4 +256,4 @@ export function canEditViolation(user: SessionUser, owner: string, reviewStatus:
   return user.role === 'agent' && owner === user.username && reviewStatus === 'under_review';
 }
 
-export { SESSION_TTL_HOURS };
+export { SESSION_TTL_HOURS, hashToken };

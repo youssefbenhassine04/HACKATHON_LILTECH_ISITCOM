@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
 import { apiGetMe, apiLogin, apiLogout } from '../lib/api';
+import { clearServerCache, syncFromServer } from '../lib/store';
 
 interface AuthContextType {
   user: User | null;
@@ -26,7 +27,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let cancelled = false;
 
     apiGetMe()
-      .then(({ user: current }) => {
+      .then(async ({ user: current }) => {
+        // Load the authoritative data set before rendering protected pages.
+        await syncFromServer().catch(() => undefined);
         if (!cancelled) setUser(current);
       })
       .catch(() => {
@@ -44,12 +47,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(async (username: string, pass: string): Promise<User> => {
     const { user: authenticated } = await apiLogin(username, pass);
+    await syncFromServer().catch(() => undefined);
     setUser(authenticated);
     return authenticated;
   }, []);
 
   const handleLogout = useCallback(() => {
     setUser(null);
+    clearServerCache();
     // Clears the server session; the UI does not wait for the round trip.
     void apiLogout().catch(() => undefined);
   }, []);

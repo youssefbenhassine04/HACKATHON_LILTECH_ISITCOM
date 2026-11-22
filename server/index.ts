@@ -1,8 +1,10 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import cookieParser from 'cookie-parser';
 import fs from 'fs';
+import path from 'path';
 import http from 'http';
 import https from 'https';
+import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import {
@@ -45,10 +47,13 @@ import {
   resetLoginFailures,
   setSessionCookie,
   clearSessionCookie,
+  revokeOtherSessions,
 } from './auth.js';
-import { hashPassword, checkPasswordPolicy } from './passwords.js';
+import { hashPassword, verifyPassword, checkPasswordPolicy } from './passwords.js';
 import {
   loginSchema,
+  passwordChangeSchema,
+  auditQuerySchema,
   userUpsertSchema,
   settingsSchema,
   violatorSchema,
@@ -197,6 +202,54 @@ app.post('/api/auth/login', loginLimiter, validateBody(loginSchema), async (req,
     next(err);
   }
 });
+
+app.post(
+  '/api/auth/password',
+  requireAuth,
+  writeLimiter,
+  validateBody(passwordChangeSchema),
+  async (req, res, next) => {
+    const { currentPassword, newPassword } = req.body as { currentPassword: string; newPassword: string };
+    const username = req.user!.username;
+
+    try {
+      const row = await pool!.query('SELECT password_hash AS "passwordHash" FROM users WHERE username = $1', [
+        username,
+      ]);
+      const storedHash: string | null = row.rows[0]?.passwordHash ?? null;
+      const currentOk = await verifyPassword(currentPassword, storedHash);
+
+      if (!currentOk) {
+        await audit({ actor: username, action: 'password_change_failed', ip: req.clientIp });
+        logSecurity({ event: 'password_change_failed', username, ip: req.clientIp });
+        res.status(401).json({ error: 'كلمة المرور الحالية غير صحيحة' });
+        return;
+      }
+      if (currentPassword === newPassword) {
+        res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تختلف عن الحالية' });
+        return;
+      }
+      const policy = checkPasswordPolicy(newPassword);
+      if (!policy.ok) {
+        res.status(400).json({ error: policy.message });
+        return;
+      }
+
+      const newHash = await hashPassword(newPassword);
+      await pool!.query('UPDATE users SET password_hash = $1, password = NULL WHERE username = $2', [
+        newHash,
+        username,
+      ]);
+      // Every other device must re-authenticate with the new password.
+      await revokeOtherSessions(username, req.sessionToken);
+
+      await audit({ actor: username, action: 'password_changed', ip: req.clientIp });
+      res.json({ success: true });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 app.post('/api/auth/logout', requireAuth, async (req, res, next) => {
   try {
@@ -792,6 +845,22 @@ app.get('/api/reports/national-summary', requireAuth, validateQuery(timeframeQue
   }
 });
 
+// ==================== SECURITY AUDIT TRAIL ====================
+
+app.get('/api/admin/audit', requireRole('admin'), validateQuery(auditQuerySchema), async (_req, res, next) => {
+  const { limit, offset } = res.locals.query as { limit: number; offset: number };
+  try {
+    const result = await pool!.query(
+      `SELECT id, at, actor, action, target, ip, user_agent AS "userAgent", details
+       FROM audit_log ORDER BY at DESC LIMIT $1 OFFSET $2`,
+      [limit, offset]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ==================== DATABASE ADMINISTRATION ====================
 
 app.post(
@@ -880,6 +949,34 @@ app.post('/api/db/reset', requireRole('admin'), writeLimiter, async (req, res, n
     next(err);
   }
 });
+
+// ==================== PRODUCTION STATIC HOSTING ====================
+// In production, the built SPA is served by this same process so cookies,
+// CSP and CORS stay strictly same-origin.
+
+if (isProduction) {
+  const distDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist');
+  if (fs.existsSync(path.join(distDir, 'index.html'))) {
+    app.use(
+      express.static(distDir, {
+        index: false,
+        maxAge: '1h',
+        setHeaders(res, filePath) {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
+    app.use((req, res, next) => {
+      if (req.method !== 'GET' || req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(distDir, 'index.html'));
+    });
+    console.log('📦 يقدّم الخادم واجهة React المبنية من المجلد dist/');
+  } else {
+    console.warn('⚠️ لم يُعثر على dist/index.html — شغّل npm run build قبل التشغيل الإنتاجي.');
+  }
+}
 
 // ==================== FALLBACKS ====================
 

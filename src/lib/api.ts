@@ -106,6 +106,31 @@ export async function apiGetMe(): Promise<{ user: User }> {
   return fetchJson<{ user: User }>('/auth/me');
 }
 
+export async function apiChangePassword(
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean }> {
+  return fetchJson('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export interface AuditEntry {
+  id: string;
+  at: string;
+  actor: string | null;
+  action: string;
+  target: string | null;
+  ip: string | null;
+  userAgent: string | null;
+  details: Record<string, unknown>;
+}
+
+export async function apiGetAuditLog(limit = 50): Promise<AuditEntry[]> {
+  return fetchJson<AuditEntry[]>(`/admin/audit?limit=${limit}`);
+}
+
 export async function apiLogout(): Promise<{ success: boolean }> {
   const result = await fetchJson<{ success: boolean }>('/auth/logout', { method: 'POST' });
   csrfToken = null;
@@ -164,7 +189,10 @@ export async function apiCreateViolation(violation: Violation): Promise<{ succes
   return fetchJson('/violations', { method: 'POST', body: JSON.stringify(violation) });
 }
 
-export async function apiUpdateViolation(id: string, updates: Partial<Violation>): Promise<{ success: boolean }> {
+export async function apiUpdateViolation(
+  id: string,
+  updates: Partial<Violation> & { reason?: string }
+): Promise<{ success: boolean }> {
   return fetchJson(`/violations/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(updates),

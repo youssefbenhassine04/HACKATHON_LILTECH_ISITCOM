@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getSettings, subscribeToStore } from '../lib/store';
-import { ArrowRight, Shield, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { ChangePasswordModal } from './ChangePasswordModal';
+import { ArrowRight, LogOut, Settings as SettingsIcon, KeyRound } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [settings, setSettings] = useState(getSettings());
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToStore(() => {
@@ -76,6 +78,14 @@ export const Header: React.FC = () => {
             )}
 
             <button
+              onClick={() => setShowPasswordModal(true)}
+              className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all touch-target flex items-center justify-center"
+              title="تغيير كلمة المرور"
+            >
+              <KeyRound className="w-5 h-5" />
+            </button>
+
+            <button
               onClick={() => {
                 if (window.confirm('هل تريد فعلاً تسجيل الخروج من التطبيق؟')) {
                   logout();
@@ -90,6 +100,8 @@ export const Header: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
     </header>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { getViolationById, getViolatorById, getSettings, updateViolation } from '../lib/store';
@@ -64,9 +64,9 @@ export const EditViolation: React.FC = () => {
   const [seizureStorage, setSeizureStorage] = useState('');
   const [seizureNotes, setSeizureNotes] = useState('');
 
-  if (!id) return null;
-
-  const existing = getViolationById(id);
+  // Stable reference: reading localStorage on every render would retrigger the
+  // hydration effect below on each pass.
+  const existing = useMemo(() => (id ? getViolationById(id) : null), [id]);
   const violator = existing ? getViolatorById(existing.violatorId) : null;
 
   useEffect(() => {

@@ -1,6 +1,17 @@
 import { User, Violator, Violation, Settings, ViolatorWithStats, ReviewStatus, MunicipalitySummary } from '../types';
 import { INITIAL_USERS, INITIAL_SETTINGS, INITIAL_VIOLATORS, INITIAL_VIOLATIONS, ALL_TUNISIAN_MUNICIPALITIES } from './seedData';
 import { generateArabicReference } from './arabicNumbers';
+import {
+  apiCreateViolation,
+  apiGetSettings,
+  apiGetViolations,
+  apiGetViolators,
+  apiResetDemoData,
+  apiSaveSettings,
+  apiSaveViolator,
+  apiSetViolationReviewStatus,
+  apiUpdateViolation,
+} from './api';
 
 const STORAGE_KEYS = {
   USERS: 'police_municipal_users',
@@ -38,6 +49,69 @@ function notifyListeners(): void {
       console.error('Error notifying store listener:', e);
     }
   });
+}
+
+// ==================== SERVER SYNC ====================
+// The API is the source of truth. The browser keeps a cache so pages can render
+// synchronously and keep working while a request is in flight.
+
+let syncError: string | null = null;
+let resyncing = false;
+
+export function getSyncError(): string | null {
+  return syncError;
+}
+
+function reportSyncError(err: unknown): void {
+  syncError = err instanceof Error ? err.message : 'تعذر الاتصال بالخادم';
+  console.error('Server sync failed:', err);
+  notifyListeners();
+}
+
+/** Pulls the authoritative data set into the local cache and re-renders pages. */
+export async function syncFromServer(): Promise<void> {
+  try {
+    const [settings, violators, violations] = await Promise.all([
+      apiGetSettings(),
+      apiGetViolators(),
+      apiGetViolations(),
+    ]);
+
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify({ ...settings, agents: undefined }));
+    localStorage.setItem(STORAGE_KEYS.VIOLATORS, JSON.stringify(violators));
+    localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(violations));
+    if (Array.isArray(settings.agents)) setUsersCache(settings.agents);
+
+    applyThemeColors(settings);
+    syncError = null;
+    notifyListeners();
+  } catch (err) {
+    reportSyncError(err);
+    throw err;
+  }
+}
+
+/** Called on logout so another account never sees the previous user's data. */
+export function clearServerCache(): void {
+  localStorage.setItem(STORAGE_KEYS.VIOLATIONS, '[]');
+  localStorage.setItem(STORAGE_KEYS.VIOLATORS, '[]');
+  localStorage.setItem(STORAGE_KEYS.USERS, '[]');
+  localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+  applyThemeColors(INITIAL_SETTINGS);
+  notifyListeners();
+}
+
+async function writeFailed(err: unknown): Promise<void> {
+  reportSyncError(err);
+  if (resyncing) return;
+  resyncing = true;
+  try {
+    await syncFromServer();
+  } catch {
+    // The banner already explains the situation; keep the cache as-is.
+  } finally {
+    resyncing = false;
+  }
 }
 
 /**
@@ -154,10 +228,32 @@ export function getSettings(): Settings {
   }
 }
 
+let settingsSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+function pushSettings(settings: Settings): void {
+  // `agents` is a server projection; never send it back.
+  const payload: Settings = { ...settings, agents: [] };
+  void apiSaveSettings(payload)
+    .then(() => {
+      syncError = null;
+    })
+    .catch(writeFailed);
+}
+
+/**
+ * Applies instantly in the UI and syncs to the server after a short pause, so
+ * typing in the settings form does not fire a request per keystroke.
+ */
 export function saveSettings(settings: Settings): void {
   localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
   applyThemeColors(settings);
   notifyListeners();
+
+  if (settingsSyncTimer) clearTimeout(settingsSyncTimer);
+  settingsSyncTimer = setTimeout(() => {
+    settingsSyncTimer = null;
+    pushSettings(settings);
+  }, 800);
 }
 
 // ==================== VIOLATORS ====================
@@ -200,6 +296,7 @@ export function saveViolator(violator: Violator): Violator {
   }
   localStorage.setItem(STORAGE_KEYS.VIOLATORS, JSON.stringify(list));
   notifyListeners();
+  void apiSaveViolator(saved).catch(writeFailed);
   return saved;
 }
 
@@ -296,6 +393,7 @@ export function createViolation(
   list.unshift(newViolation);
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(list));
   notifyListeners();
+  void apiCreateViolation(newViolation).catch(writeFailed);
   return newViolation;
 }
 
@@ -369,6 +467,7 @@ export function updateViolation(
   list[index] = updatedViolation;
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(list));
   notifyListeners();
+  void apiUpdateViolation(id, { ...updates, reason: editReason.trim() } as Partial<Violation>).catch(writeFailed);
   return updatedViolation;
 }
 
@@ -408,6 +507,7 @@ export function setViolationReviewStatus(
   list[index] = updated;
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(list));
   notifyListeners();
+  void apiSetViolationReviewStatus(id, status, editLogEntry.reason).catch(writeFailed);
   return updated;
 }
 
@@ -524,6 +624,9 @@ export function resetToDemoData(): void {
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(INITIAL_VIOLATIONS));
   applyThemeColors(INITIAL_SETTINGS);
   notifyListeners();
+  void apiResetDemoData()
+    .then(() => syncFromServer())
+    .catch(writeFailed);
 }
 
 export function exportAllData(): string {
