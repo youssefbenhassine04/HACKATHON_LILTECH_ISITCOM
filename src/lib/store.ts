@@ -1,5 +1,5 @@
-import { User, Violator, Violation, Settings, ViolatorWithStats } from '../types';
-import { INITIAL_USERS, INITIAL_SETTINGS, INITIAL_VIOLATORS, INITIAL_VIOLATIONS } from './seedData';
+import { User, Violator, Violation, Settings, ViolatorWithStats, ReviewStatus, MunicipalitySummary } from '../types';
+import { INITIAL_USERS, INITIAL_SETTINGS, INITIAL_VIOLATORS, INITIAL_VIOLATIONS, ALL_TUNISIAN_MUNICIPALITIES } from './seedData';
 import { generateArabicReference } from './arabicNumbers';
 
 const STORAGE_KEYS = {
@@ -46,6 +46,26 @@ export function initializeStore(): void {
   }
   if (!localStorage.getItem(STORAGE_KEYS.VIOLATIONS)) {
     localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(INITIAL_VIOLATIONS));
+  } else {
+    // If violations already exist in storage but lack reviewStatus, backfill it seamlessly
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.VIOLATIONS);
+      if (raw) {
+        const list: Violation[] = JSON.parse(raw);
+        let changed = false;
+        // If older storage doesn't have reviewStatus or nationwide seed, ensure seamless data
+        if (list.length < INITIAL_VIOLATIONS.length || list.some((v) => !v.reviewStatus)) {
+          // Merge or refresh with initial violations while preserving any user-added violations
+          const userAdded = list.filter((v) => !INITIAL_VIOLATIONS.some((iv) => iv.id === v.id));
+          const updated = [...userAdded, ...INITIAL_VIOLATIONS];
+          localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(updated));
+          changed = true;
+        }
+        if (changed) notifyListeners();
+      }
+    } catch (e) {
+      console.warn('Backfill check warning:', e);
+    }
   }
 
   // Apply colors dynamically
@@ -285,7 +305,9 @@ export function getNextSerial(year: number): number {
 }
 
 export function createViolation(
-  data: Omit<Violation, 'id' | 'reference' | 'arabicReference' | 'serial' | 'year' | 'municipalityCode' | 'edits'>
+  data: Omit<Violation, 'id' | 'reference' | 'arabicReference' | 'serial' | 'year' | 'municipalityCode' | 'edits' | 'reviewStatus'> & {
+    reviewStatus?: ReviewStatus;
+  }
 ): Violation {
   const settings = getSettings();
   const year = new Date(data.date || new Date()).getFullYear();
@@ -303,6 +325,8 @@ export function createViolation(
     serial,
     year,
     municipalityCode: code,
+    municipalityName: settings.municipalityName,
+    reviewStatus: data.reviewStatus || 'under_review',
     edits: [],
   };
 
@@ -347,6 +371,7 @@ export function updateViolation(
     'vehicleColor',
     'photosByCategory',
     'seizure',
+    'reviewStatus',
   ];
 
   editableKeys.forEach((key) => {
@@ -374,6 +399,7 @@ export function updateViolation(
     serial: existing.serial,
     year: existing.year,
     municipalityCode: existing.municipalityCode,
+    municipalityName: existing.municipalityName || existing.delegation,
     violatorId: existing.violatorId,
     edits: [editLogEntry, ...(existing.edits || [])],
   };
@@ -382,6 +408,149 @@ export function updateViolation(
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(list));
   notifyListeners();
   return updatedViolation;
+}
+
+/**
+ * Toggles or updates the review status of a violation (under_review <-> reviewed)
+ */
+export function setViolationReviewStatus(
+  id: string,
+  status: ReviewStatus,
+  reviewer: User
+): Violation {
+  const list = getViolations();
+  const index = list.findIndex((v) => v.id === id);
+  if (index < 0) throw new Error('Violation not found');
+
+  const existing = list[index];
+  const isApproving = status === 'reviewed';
+
+  const editLogEntry = {
+    date: new Date().toISOString(),
+    username: reviewer.username,
+    fullName: reviewer.fullName,
+    reason: isApproving
+      ? 'اعتماد ومصادقة محضر المعاينة الميدانية بعد التدقيق'
+      : 'إعادة المحضر إلى وضعية قيد التدقيق والمراجعة',
+    fields: ['reviewStatus'],
+  };
+
+  const updated: Violation = {
+    ...existing,
+    reviewStatus: status,
+    reviewedBy: isApproving ? reviewer.fullName : undefined,
+    reviewedAt: isApproving ? new Date().toISOString() : undefined,
+    edits: [editLogEntry, ...(existing.edits || [])],
+  };
+
+  list[index] = updated;
+  localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(list));
+  notifyListeners();
+  return updated;
+}
+
+// ==================== NATIONAL MUNICIPALITIES SUMMARY ====================
+
+export interface NationalSummaryResult {
+  timeframe: 'weekly' | 'monthly';
+  timeframeLabel: string;
+  totalViolations: number;
+  totalUnderReview: number;
+  totalReviewed: number;
+  reviewPercentage: number;
+  totalSeizures: number;
+  activeMunicipalitiesCount: number;
+  summaries: MunicipalitySummary[];
+}
+
+export function getNationalMunicipalitySummary(timeframe: 'weekly' | 'monthly'): NationalSummaryResult {
+  const allViolations = getViolations();
+  const now = Date.now();
+  const cutoffMs = timeframe === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000;
+  const cutoffDate = now - cutoffMs;
+
+  // Filter violations within selected timeframe
+  const filteredViolations = allViolations.filter((v) => {
+    const time = new Date(v.date).getTime();
+    return !isNaN(time) && time >= cutoffDate;
+  });
+
+  // Map to collect data for all municipalities in the country
+  const map: Map<string, MunicipalitySummary> = new Map();
+
+  ALL_TUNISIAN_MUNICIPALITIES.forEach((m) => {
+    map.set(m.code, {
+      municipalityCode: m.code,
+      municipalityName: m.name,
+      governorate: m.governorate,
+      totalViolations: 0,
+      underReviewCount: 0,
+      reviewedCount: 0,
+      reviewPercentage: 0,
+      seizuresCount: 0,
+    });
+  });
+
+  filteredViolations.forEach((v) => {
+    const code = (v.municipalityCode || 'MUN').toUpperCase();
+    let entry = map.get(code);
+    if (!entry) {
+      entry = {
+        municipalityCode: code,
+        municipalityName: v.municipalityName || v.delegation || code,
+        governorate: v.governorate || 'غير محدد',
+        totalViolations: 0,
+        underReviewCount: 0,
+        reviewedCount: 0,
+        reviewPercentage: 0,
+        seizuresCount: 0,
+      };
+      map.set(code, entry);
+    }
+
+    entry.totalViolations += 1;
+    if (v.reviewStatus === 'reviewed') {
+      entry.reviewedCount += 1;
+    } else {
+      entry.underReviewCount += 1;
+    }
+    if (v.seizure && v.seizure.has) {
+      entry.seizuresCount += 1;
+    }
+  });
+
+  // Calculate review percentages and sort
+  const summaries: MunicipalitySummary[] = Array.from(map.values()).map((s) => ({
+    ...s,
+    reviewPercentage: s.totalViolations > 0 ? Math.round((s.reviewedCount / s.totalViolations) * 100) : 0,
+  }));
+
+  // Sort: Active municipalities first (highest violations), then alphabetically
+  summaries.sort((a, b) => {
+    if (b.totalViolations !== a.totalViolations) {
+      return b.totalViolations - a.totalViolations;
+    }
+    return a.municipalityName.localeCompare(b.municipalityName, 'ar');
+  });
+
+  const totalViolations = filteredViolations.length;
+  const totalUnderReview = filteredViolations.filter((v) => v.reviewStatus !== 'reviewed').length;
+  const totalReviewed = filteredViolations.filter((v) => v.reviewStatus === 'reviewed').length;
+  const reviewPercentage = totalViolations > 0 ? Math.round((totalReviewed / totalViolations) * 100) : 0;
+  const totalSeizures = filteredViolations.filter((v) => v.seizure && v.seizure.has).length;
+  const activeMunicipalitiesCount = summaries.filter((s) => s.totalViolations > 0).length;
+
+  return {
+    timeframe,
+    timeframeLabel: timeframe === 'weekly' ? 'الحصيلة الأسبوعية (آخر 7 أيام)' : 'الحصيلة الشهرية (آخر 30 يوماً)',
+    totalViolations,
+    totalUnderReview,
+    totalReviewed,
+    reviewPercentage,
+    totalSeizures,
+    activeMunicipalitiesCount,
+    summaries,
+  };
 }
 
 // ==================== DATA MANAGEMENT ====================

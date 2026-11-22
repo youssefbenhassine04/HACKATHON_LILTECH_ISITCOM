@@ -58,6 +58,8 @@ export interface ViolationLocation {
   };
 }
 
+export type ReviewStatus = 'under_review' | 'reviewed';
+
 export interface Violation {
   id: string;
   reference: string; // e.g. "2026-SIDI-0001"
@@ -65,6 +67,7 @@ export interface Violation {
   serial: number;
   year: number;
   municipalityCode: string;
+  municipalityName?: string;
   violatorId: string;
   agentUsername: string;
   agentName: string;
@@ -88,6 +91,11 @@ export interface Violation {
   description: string;
   action: string;
   notes?: string;
+
+  // Review Status
+  reviewStatus: ReviewStatus;
+  reviewedBy?: string;
+  reviewedAt?: string;
 
   // Vehicle
   hasVehicle: boolean;
@@ -126,4 +134,15 @@ export interface ViolatorWithStats extends Violator {
   lastViolationDate?: string;
   lastViolationPlace?: string;
   lastAction?: string;
+}
+
+export interface MunicipalitySummary {
+  municipalityCode: string;
+  municipalityName: string;
+  governorate: string;
+  totalViolations: number;
+  underReviewCount: number;
+  reviewedCount: number;
+  reviewPercentage: number;
+  seizuresCount: number;
 }

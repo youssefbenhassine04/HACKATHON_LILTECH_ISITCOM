@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { getViolationById, getViolatorById, getSettings } from '../lib/store';
-import { PhotoCategory, ViolationPhotos } from '../types';
+import { getViolationById, getViolatorById, getSettings, setViolationReviewStatus } from '../lib/store';
+import { PhotoCategory, ReviewStatus } from '../types';
 import { formatArabicDate } from '../lib/dateUtils';
 import {
   FileText,
@@ -15,11 +15,13 @@ import {
   Package,
   Calendar,
   Clock,
-  Shield,
+  CheckCircle2,
+  AlertCircle,
   History,
   ZoomIn,
   X,
   FileDown,
+  Building,
 } from 'lucide-react';
 
 const CATEGORY_NAMES: { [key in PhotoCategory]: string } = {
@@ -37,10 +39,11 @@ export const ViolationDetails: React.FC = () => {
   const settings = getSettings();
 
   const [activeModalImage, setActiveModalImage] = useState<string | null>(null);
+  const [violationState, setViolationState] = useState(() => (id ? getViolationById(id) : null));
 
   if (!id) return null;
 
-  const violation = getViolationById(id);
+  const violation = violationState || getViolationById(id);
   if (!violation) {
     return (
       <div className="bg-white rounded-3xl p-8 border border-slate-200 text-center space-y-3">
@@ -56,11 +59,17 @@ export const ViolationDetails: React.FC = () => {
   }
 
   const violator = getViolatorById(violation.violatorId);
-
   const canEdit = user?.role === 'chef' || user?.role === 'admin';
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleToggleReview = () => {
+    if (!user) return;
+    const nextStatus: ReviewStatus = violation.reviewStatus === 'reviewed' ? 'under_review' : 'reviewed';
+    const updated = setViolationReviewStatus(violation.id, nextStatus, user);
+    setViolationState(updated);
   };
 
   const hasCoordinates = violation.geo && violation.geo.lat !== 0 && violation.geo.lng !== 0;
@@ -90,7 +99,7 @@ export const ViolationDetails: React.FC = () => {
             {violation.reference}
           </span>
           <span className="text-xs text-slate-500 font-semibold hidden sm:inline">
-            سجل رقم #{violation.serial}
+            بلدية {violation.municipalityName || settings.municipalityName}
           </span>
         </div>
 
@@ -98,10 +107,10 @@ export const ViolationDetails: React.FC = () => {
           {canEdit && (
             <button
               onClick={() => navigate(`/violations/${violation.id}/edit`)}
-              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 touch-target active:scale-95 transition-all"
+              className="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5 touch-target active:scale-95 transition-all"
             >
               <Edit className="w-3.5 h-3.5" />
-              <span>تعديل المحضر</span>
+              <span>تعديل</span>
             </button>
           )}
 
@@ -129,6 +138,75 @@ export const ViolationDetails: React.FC = () => {
       {/* SCREEN UI VIEW (Clean interactive mobile cards) */}
       {/* ============================================================ */}
       <div className="no-print space-y-4">
+        {/* Review Status Banner & Approval Action */}
+        <div
+          className={`p-3.5 rounded-3xl flex flex-wrap items-center justify-between gap-2.5 border shadow-sm ${
+            violation.reviewStatus === 'reviewed'
+              ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+              : 'bg-amber-50/90 border-amber-200 text-amber-950'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`w-9 h-9 rounded-2xl flex items-center justify-center ${
+                violation.reviewStatus === 'reviewed'
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-amber-500 text-white'
+              }`}
+            >
+              {violation.reviewStatus === 'reviewed' ? (
+                <CheckCircle2 className="w-5 h-5" />
+              ) : (
+                <Clock className="w-5 h-5" />
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xs">
+                  {violation.reviewStatus === 'reviewed'
+                    ? 'محضر معتمد ومصادق عليه نهائياً'
+                    : 'محضر قيد التدقيق والمراجعة الإدارية'}
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.2 rounded-full ${
+                    violation.reviewStatus === 'reviewed'
+                      ? 'bg-emerald-200 text-emerald-800'
+                      : 'bg-amber-200 text-amber-800'
+                  }`}
+                >
+                  {violation.reviewStatus === 'reviewed' ? 'تمت المراجعة' : 'تحت المراجعة'}
+                </span>
+              </div>
+              {violation.reviewedBy ? (
+                <span className="text-[11px] text-emerald-800 block mt-0.5 font-medium">
+                  تم التدقيق والاعتماد من قبل: <strong>{violation.reviewedBy}</strong>
+                  {violation.reviewedAt && ` • ${formatArabicDate(violation.reviewedAt)}`}
+                </span>
+              ) : (
+                <span className="text-[11px] text-amber-800 block mt-0.5">
+                  بانتظار مصادقة رئيس الفرقة أو رئيس المركز
+                </span>
+              )}
+            </div>
+          </div>
+
+          {canEdit && (
+            <button
+              onClick={handleToggleReview}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 touch-target ${
+                violation.reviewStatus === 'reviewed'
+                  ? 'bg-white border border-amber-300 text-amber-800 hover:bg-amber-50'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+              }`}
+            >
+              {violation.reviewStatus === 'reviewed'
+                ? 'إعادة للتدقيق'
+                : 'اعتماد ومصادقة المحضر ✓'}
+            </button>
+          )}
+        </div>
+
         {/* Main Reference & Header Card */}
         <div className="bg-white rounded-3xl p-5 border border-slate-200 shadow-sm space-y-3">
           <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3">
@@ -164,6 +242,10 @@ export const ViolationDetails: React.FC = () => {
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-slate-400" />
               <span>العون المعاين: <strong>{violation.agentName}</strong> ({violation.agentUsername})</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Building className="w-4 h-4 text-slate-400" />
+              <span>البلدية: <strong>بلدية {violation.municipalityName || settings.municipalityName}</strong> (ولاية {violation.governorate})</span>
             </div>
           </div>
         </div>
@@ -476,7 +558,7 @@ export const ViolationDetails: React.FC = () => {
               <p>وزارة الداخلية</p>
               <p>الإدارة العامة للأمن الوطني</p>
               <p>إدارة الشرطة البلدية</p>
-              <p className="font-bold">بلدية {settings.municipalityName}</p>
+              <p className="font-bold">بلدية {violation.municipalityName || settings.municipalityName}</p>
             </div>
 
             <div className="w-16 h-16 flex items-center justify-center">
@@ -488,6 +570,8 @@ export const ViolationDetails: React.FC = () => {
               <p className="font-bold">{formatArabicDate(violation.date)}</p>
               <p className="mt-1">رقم المحضر:</p>
               <p className="font-bold">{violation.reference}</p>
+              <p className="mt-1">حالة التدقيق:</p>
+              <p className="font-bold">{violation.reviewStatus === 'reviewed' ? 'معتمد ومصادق عليه' : 'قيد التدقيق'}</p>
             </div>
           </div>
 
@@ -501,7 +585,7 @@ export const ViolationDetails: React.FC = () => {
 
         {/* Legal Statement */}
         <p className="text-xs leading-relaxed text-justify">
-          نحن الممضين أسفله، أعوان إدارة الشرطة البلدية ببلدية <strong>{settings.municipalityName}</strong>،
+          نحن الممضين أسفله، أعوان إدارة الشرطة البلدية ببلدية <strong>{violation.municipalityName || settings.municipalityName}</strong>،
           المحلفين طبقاً للقانون، عاينّا في نطاق مهام المراقبة والتراتيب البلدية الوقائع التالية:
         </p>
 
@@ -574,7 +658,7 @@ export const ViolationDetails: React.FC = () => {
 
           <div className="border border-black p-4 h-32 flex flex-col justify-between">
             <p className="font-bold">توقيع وختم رئيس مركز الشرطة البلدية</p>
-            <p className="text-[11px] text-gray-700">بلدية {settings.municipalityName}</p>
+            <p className="text-[11px] text-gray-700">بلدية {violation.municipalityName || settings.municipalityName}</p>
           </div>
         </div>
 
