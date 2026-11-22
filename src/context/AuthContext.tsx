@@ -1,51 +1,70 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../types';
-import { getCurrentUser, setCurrentUser as storeSetCurrentUser, authenticate, logout as storeLogout, subscribeToStore } from '../lib/store';
+import { apiGetMe, apiLogin, apiLogout } from '../lib/api';
 
 interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
-  login: (username: string, pass: string) => User | null;
+  isLoading: boolean;
+  login: (username: string, pass: string) => Promise<User>;
   logout: () => void;
   hasRole: (roles: ('agent' | 'chef' | 'admin')[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * Authentication is backed by the server: an httpOnly session cookie is set on
+ * login and the current user is restored with GET /api/auth/me on reload.
+ * Nothing sensitive is stored in localStorage/sessionStorage.
+ */
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => getCurrentUser());
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = subscribeToStore(() => {
-      setUser(getCurrentUser());
-    });
-    return unsubscribe;
+    let cancelled = false;
+
+    apiGetMe()
+      .then(({ user: current }) => {
+        if (!cancelled) setUser(current);
+      })
+      .catch(() => {
+        // 401 (no session) or the API being unreachable: fail closed.
+        if (!cancelled) setUser(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = (username: string, pass: string): User | null => {
-    const authenticatedUser = authenticate(username, pass);
-    if (authenticatedUser) {
-      setUser(authenticatedUser);
-      return authenticatedUser;
-    }
-    return null;
-  };
+  const login = useCallback(async (username: string, pass: string): Promise<User> => {
+    const { user: authenticated } = await apiLogin(username, pass);
+    setUser(authenticated);
+    return authenticated;
+  }, []);
 
-  const handleLogout = () => {
-    storeLogout();
+  const handleLogout = useCallback(() => {
     setUser(null);
-  };
+    // Clears the server session; the UI does not wait for the round trip.
+    void apiLogout().catch(() => undefined);
+  }, []);
 
-  const hasRole = (roles: ('agent' | 'chef' | 'admin')[]): boolean => {
-    if (!user) return false;
-    return roles.includes(user.role);
-  };
+  const hasRole = useCallback(
+    (roles: ('agent' | 'chef' | 'admin')[]): boolean => (user ? roles.includes(user.role) : false),
+    [user]
+  );
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isAuthenticated: !!user,
+        isLoading,
         login,
         logout: handleLogout,
         hasRole,

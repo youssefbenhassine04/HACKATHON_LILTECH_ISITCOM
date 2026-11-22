@@ -7,8 +7,17 @@ const STORAGE_KEYS = {
   SETTINGS: 'police_municipal_settings',
   VIOLATORS: 'police_municipal_violators',
   VIOLATIONS: 'police_municipal_violations',
-  SESSION: 'police_municipal_session_user',
 };
+
+/** Passwords are never persisted in the browser — only the server stores hashes. */
+function sanitizeUsers(users: User[]): User[] {
+  return users.map((u) => ({
+    username: u.username,
+    fullName: u.fullName,
+    role: u.role,
+    badgeNumber: u.badgeNumber,
+  }));
+}
 
 // Simple event emitter for reactive store updates
 type StoreListener = () => void;
@@ -36,7 +45,17 @@ function notifyListeners(): void {
  */
 export function initializeStore(): void {
   if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
-    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+    localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sanitizeUsers(INITIAL_USERS)));
+  } else {
+    // Drop plaintext passwords left by older versions of the app.
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.USERS);
+      if (raw && raw.includes('"password"')) {
+        localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sanitizeUsers(JSON.parse(raw))));
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEYS.USERS);
+    }
   }
   if (!localStorage.getItem(STORAGE_KEYS.SETTINGS)) {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
@@ -106,78 +125,21 @@ function adjustBrightness(hex: string, percent: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-// ==================== AUTH & SESSION ====================
-
-export function getCurrentUser(): User | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEYS.SESSION);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setCurrentUser(user: User | null): void {
-  if (user) {
-    sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(user));
-  } else {
-    sessionStorage.removeItem(STORAGE_KEYS.SESSION);
-  }
-  notifyListeners();
-}
-
-export function authenticate(username: string, password: string): User | null {
-  const users = getUsers();
-  const found = users.find(
-    (u) => u.username.toLowerCase() === username.trim().toLowerCase() && u.password === password.trim()
-  );
-  if (found) {
-    const { password: _, ...safeUser } = found;
-    setCurrentUser(safeUser as User);
-    return safeUser as User;
-  }
-  return null;
-}
-
-export function logout(): void {
-  setCurrentUser(null);
-}
+// ==================== USERS (read-only cache) ====================
+// Authentication lives on the server (see AuthContext); the browser only keeps
+// a password-free directory used to render agent lists.
 
 export function getUsers(): User[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.USERS);
-    return raw ? JSON.parse(raw) : INITIAL_USERS;
+    return raw ? sanitizeUsers(JSON.parse(raw)) : sanitizeUsers(INITIAL_USERS);
   } catch {
-    return INITIAL_USERS;
+    return sanitizeUsers(INITIAL_USERS);
   }
 }
 
-export function saveUser(user: User): void {
-  const users = getUsers();
-  const index = users.findIndex((u) => u.username === user.username);
-  if (index >= 0) {
-    users[index] = { ...users[index], ...user };
-  } else {
-    users.push(user);
-  }
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-
-  // Also update agents in settings
-  const settings = getSettings();
-  settings.agents = users;
-  saveSettings(settings);
-
-  notifyListeners();
-}
-
-export function deleteUser(username: string): void {
-  const users = getUsers().filter((u) => u.username !== username);
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(users));
-
-  const settings = getSettings();
-  settings.agents = users;
-  saveSettings(settings);
-
+export function setUsersCache(users: User[]): void {
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sanitizeUsers(users)));
   notifyListeners();
 }
 
@@ -556,7 +518,7 @@ export function getNationalMunicipalitySummary(timeframe: 'weekly' | 'monthly'):
 // ==================== DATA MANAGEMENT ====================
 
 export function resetToDemoData(): void {
-  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(INITIAL_USERS));
+  localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sanitizeUsers(INITIAL_USERS)));
   localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(INITIAL_SETTINGS));
   localStorage.setItem(STORAGE_KEYS.VIOLATORS, JSON.stringify(INITIAL_VIOLATORS));
   localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(INITIAL_VIOLATIONS));
@@ -582,7 +544,9 @@ export function importAllData(jsonString: string): boolean {
     if (!data.violators || !data.violations || !data.settings) {
       return false;
     }
-    if (data.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(data.users));
+    if (Array.isArray(data.users)) {
+      localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(sanitizeUsers(data.users)));
+    }
     if (data.settings) localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(data.settings));
     if (data.violators) localStorage.setItem(STORAGE_KEYS.VIOLATORS, JSON.stringify(data.violators));
     if (data.violations) localStorage.setItem(STORAGE_KEYS.VIOLATIONS, JSON.stringify(data.violations));

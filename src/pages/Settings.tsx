@@ -1,15 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   getSettings,
   saveSettings,
   getUsers,
-  saveUser,
-  deleteUser,
   resetToDemoData,
   exportAllData,
   importAllData,
 } from '../lib/store';
+import { apiGetUsers, apiSaveUser, apiDeleteUser } from '../lib/api';
 import { Settings as SettingsType, User as UserType, UserRole } from '../types';
 import {
   Settings as SettingsIcon,
@@ -33,6 +32,19 @@ export const Settings: React.FC = () => {
   const { user } = useAuth();
   const [settings, setSettingsState] = useState<SettingsType>(getSettings());
   const [usersList, setUsersList] = useState<UserType[]>(getUsers());
+
+  // The server is the source of truth for accounts (no passwords in the browser).
+  useEffect(() => {
+    let cancelled = false;
+    apiGetUsers()
+      .then((list) => {
+        if (!cancelled) setUsersList(list);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Feedback states
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -100,40 +112,48 @@ export const Settings: React.FC = () => {
   };
 
   // Agent Management
-  const handleCreateAgent = (e: React.FormEvent) => {
+  const handleCreateAgent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAgentUsername.trim() || !newAgentPassword.trim() || !newAgentFullName.trim()) {
       alert('يرجى ملء جميع حقول العون الجديد');
       return;
     }
 
-    const newAgent: UserType = {
-      username: newAgentUsername.trim().toLowerCase(),
-      password: newAgentPassword.trim(),
-      fullName: newAgentFullName.trim(),
-      role: newAgentRole,
-      badgeNumber: newAgentBadge.trim() || undefined,
-    };
-
-    saveUser(newAgent);
-    setUsersList(getUsers());
-    setShowAddAgent(false);
-    setNewAgentUsername('');
-    setNewAgentPassword('');
-    setNewAgentFullName('');
-    setNewAgentBadge('');
-    setSaveSuccess('تمت إضافة العون الجديد بنجاح');
-    setTimeout(() => setSaveSuccess(null), 3000);
+    try {
+      await apiSaveUser({
+        username: newAgentUsername.trim().toLowerCase(),
+        password: newAgentPassword.trim(),
+        fullName: newAgentFullName.trim(),
+        role: newAgentRole,
+        badgeNumber: newAgentBadge.trim() || undefined,
+      });
+      setUsersList(await apiGetUsers());
+      setShowAddAgent(false);
+      setNewAgentUsername('');
+      setNewAgentPassword('');
+      setNewAgentFullName('');
+      setNewAgentBadge('');
+      setSaveSuccess('تمت إضافة العون الجديد بنجاح');
+      setTimeout(() => setSaveSuccess(null), 3000);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'تعذر حفظ حساب العون');
+      setTimeout(() => setErrorMsg(null), 5000);
+    }
   };
 
-  const handleDeleteAgent = (username: string) => {
+  const handleDeleteAgent = async (username: string) => {
     if (username === user?.username) {
       alert('لا يمكنك حذف حسابك المتصل به حالياً');
       return;
     }
     if (window.confirm(`هل أنت متأكد من حذف حساب العون: ${username}؟`)) {
-      deleteUser(username);
-      setUsersList(getUsers());
+      try {
+        await apiDeleteUser(username);
+        setUsersList(await apiGetUsers());
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'تعذر حذف الحساب');
+        setTimeout(() => setErrorMsg(null), 5000);
+      }
     }
   };
 

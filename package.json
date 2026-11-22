@@ -5,25 +5,46 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "db": "tsx server/local-db.ts",
+    "server": "tsx server/index.ts",
+    "dev:full": "concurrently -k -n db,frontend,backend -c magenta,cyan,yellow \"npm run db\" \"npm run dev\" \"npm run server\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cert:dev": "tsx server/gen-cert.ts"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.5",
+    "helmet": "^8.3.0",
     "lucide-react": "^1.77.0",
+    "pg": "^8.23.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
-    "react-router-dom": "^7.18.6"
+    "react-router-dom": "^7.18.6",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "autoprefixer": "^10.7.0",
+    "concurrently": "^10.0.7",
+    "embedded-postgres": "^18.7.0-beta.19",
     "oxlint": "^1.90.0",
     "postcss": "^8.5.33",
+    "selfsigned": "^5.5.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "~7.0.2",
     "vite": "^8.3.6"
   }

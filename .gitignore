@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local PostgreSQL cluster (npm run db)
+.pgdata/
+data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +26,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.certs/
+
+# Local secrets — never commit
+.env
+.env.local

@@ -17,20 +17,19 @@ export const Login: React.FC = () => {
 
   const from = (location.state as any)?.from?.pathname || '/';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const loggedUser = login(username, password);
+    try {
+      await login(username, password);
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'تعذر تسجيل الدخول، يرجى المحاولة مجدداً.');
+    } finally {
       setIsLoading(false);
-      if (loggedUser) {
-        navigate(from, { replace: true });
-      } else {
-        setError('اسم المستخدم أو كلمة المرور غير صحيحة. يرجى التثبت والمحاولة مجدداً.');
-      }
-    }, 200);
+    }
   };
 
   const handleQuickFill = (u: string, p: string) => {
