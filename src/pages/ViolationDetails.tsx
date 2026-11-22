@@ -562,7 +562,7 @@ export const ViolationDetails: React.FC = () => {
             </div>
 
             <div className="w-16 h-16 flex items-center justify-center">
-              <img src="/badge.svg" alt="شعار" className="w-full h-full object-contain" />
+              <img src="/logo-192.png" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
             </div>
 
             <div className="text-left text-xs leading-relaxed font-mono">

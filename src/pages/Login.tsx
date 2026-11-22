@@ -44,8 +44,8 @@ export const Login: React.FC = () => {
         {/* Emblem & Title */}
         <div className="text-center mb-6">
           <div className="inline-block relative mb-3">
-            <div className="w-20 h-20 mx-auto rounded-2xl bg-slate-50 p-2 border-2 border-primary/20 shadow-md">
-              <img src="/badge.svg" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
+            <div className="w-20 h-20 mx-auto rounded-2xl bg-white p-1 border-2 border-primary/20 shadow-md overflow-hidden">
+              <img src="/logo-192.png" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
             </div>
             <span className="absolute -bottom-1 -right-1 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">
               الجمهورية التونسية

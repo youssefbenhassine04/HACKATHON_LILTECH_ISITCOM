@@ -12,7 +12,6 @@ import {
   Settings as SettingsIcon,
   LogOut,
   Clock,
-  Shield,
   AlertTriangle,
   Package,
   Calendar,
@@ -60,16 +59,11 @@ export const Home: React.FC = () => {
     <div className="space-y-4">
       {/* Top Agent & Live Time Card */}
       <div className="bg-gradient-to-l from-primary via-slate-900 to-slate-900 text-white rounded-3xl p-5 shadow-lg border border-primary-light relative overflow-hidden">
-        {/* Subtle background insignia */}
-        <div className="absolute left-[-15px] bottom-[-20px] opacity-10 pointer-events-none w-44 h-44">
-          <img src="/badge.svg" alt="" className="w-full h-full object-contain" />
-        </div>
-
         <div className="relative z-10 space-y-3">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 p-2 flex items-center justify-center border border-white/20 shadow-inner">
-                <Shield className="w-7 h-7 text-yellow-400" />
+              <div className="w-12 h-12 rounded-2xl bg-white p-0.5 flex items-center justify-center ring-1 ring-white/20 shadow-md overflow-hidden">
+                <img src="/logo-192.png" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
               </div>
               <div>
                 <span className="text-[11px] font-semibold text-slate-300 block uppercase tracking-wider">

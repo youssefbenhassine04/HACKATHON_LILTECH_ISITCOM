@@ -193,7 +193,10 @@ The original prototype stored everything in the browser (`localStorage`) with mo
 ├── tsconfig.node.json
 ├── .env.example                # Documented environment template
 ├── public/
-│   ├── badge.svg               # Institutional emblem
+│   ├── logo.png                # Institutional emblem (512×512 master, used by the PWA)
+│   ├── logo-192.png            # Emblem used in the UI (header, login, reports)
+│   ├── apple-touch-icon.png    # iOS home-screen icon (180×180)
+│   ├── favicon-64.png          # Browser favicon (64×64)
 │   ├── manifest.json           # PWA manifest
 │   └── icons.svg
 ├── server/
@@ -209,6 +212,7 @@ The original prototype stored everything in the browser (`localStorage`) with mo
 │   ├── schema.sql              # Idempotent DDL, indexes, trigger
 │   └── tsconfig.json           # Server type-check project
 ├── src/
+│   ├── assets/logo-source.jpeg # Original logo artwork (source for public/logo*.png)
 │   ├── main.tsx                # Bootstrap + theme application
 │   ├── App.tsx                 # Routes and role-protected trees
 │   ├── context/AuthContext.tsx # Server session, hydration, login/logout

@@ -42,8 +42,8 @@ export const Header: React.FC = () => {
             onClick={() => navigate('/')}
             className="flex items-center gap-2.5 cursor-pointer active:opacity-90"
           >
-            <div className="w-9 h-9 rounded-lg bg-white/10 p-1 flex items-center justify-center border border-white/20 shadow-inner">
-              <img src="/badge.svg" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
+            <div className="w-9 h-9 rounded-lg bg-white p-0.5 flex items-center justify-center ring-1 ring-white/25 shadow-sm overflow-hidden">
+              <img src="/logo-192.png" alt="شعار الشرطة البلدية" className="w-full h-full object-contain" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
