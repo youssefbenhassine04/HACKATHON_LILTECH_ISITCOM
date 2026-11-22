@@ -1,0 +1,18 @@
+{
+  "short_name": "الشرطة البلدية",
+  "name": "الشرطة البلدية - منظومة المعاينة الميدانية",
+  "icons": [
+    {
+      "src": "/badge.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0b2545",
+  "theme_color": "#0b2545",
+  "display": "standalone",
+  "orientation": "portrait",
+  "dir": "rtl",
+  "lang": "ar"
+}
