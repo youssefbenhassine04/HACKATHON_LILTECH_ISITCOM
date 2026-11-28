@@ -41,7 +41,13 @@ export const HTTPS_CERT_PATH = str(process.env.HTTPS_CERT_PATH, '.certs/dev-cert
 /** Optional plain-HTTP listener that redirects every request to HTTPS. */
 export const HTTP_REDIRECT_PORT = num(process.env.HTTP_REDIRECT_PORT, 0);
 
-export const COOKIE_SECURE = HTTPS_ENABLED || isProduction;
+/**
+ * Secure cookies (and the `__Host-` prefix) follow HTTPS / production.
+ * COOKIE_SECURE=false is only for plain-HTTP deployments such as local
+ * Docker, where the browser would otherwise drop the session cookie.
+ */
+export const COOKIE_SECURE =
+  process.env.COOKIE_SECURE === undefined ? HTTPS_ENABLED || isProduction : bool(process.env.COOKIE_SECURE, false);
 
 const DEV_ORIGINS = [
   'http://localhost:5173',

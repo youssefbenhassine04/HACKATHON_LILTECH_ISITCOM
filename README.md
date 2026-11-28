@@ -185,6 +185,9 @@ The original prototype stored everything in the browser (`localStorage`) with mo
 
 ```
 .
+├── Dockerfile                  # Multi-stage build: Vite SPA → Express runtime
+├── docker-compose.yml          # App + PostgreSQL 18 stack
+├── .dockerignore
 ├── index.html                  # Vite entry (RTL, Cairo font, PWA metadata)
 ├── vite.config.ts              # Dev proxy /api → :3001 (HTTP or HTTPS)
 ├── tailwind.config.js
@@ -277,6 +280,43 @@ npm start              # Express serves dist/ AND /api on one origin
 
 Set `NODE_ENV=production` (and TLS settings) in the environment for a real deployment.
 
+### Run with Docker
+
+The image builds the SPA and serves it from the Express API, so UI and API share
+one origin. PostgreSQL 18 runs in its own container and stores its data in a
+named volume.
+
+```bash
+docker compose up --build -d   # build the image, start db + api
+docker compose logs -f app     # schema / seed progress
+```
+
+Open **http://localhost:3001** — same demo accounts as above; the schema is
+applied and demo data seeded automatically on first boot.
+
+| Detail | Value |
+|---|---|
+| Files | `Dockerfile`, `docker-compose.yml`, `.dockerignore` |
+| App URL | http://localhost:3001 (override with `APP_PORT`) |
+| Database | `postgres:18`, data in the `pgdata` volume, not published to the host |
+| Migrations | Applied by the API on startup (`server/schema.sql`) |
+| Stop | `docker compose down` (keep data) · `docker compose down -v` (delete data) |
+
+Optional variables (shell env or a `.env` file next to the compose file):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `APP_PORT` | `3001` | Host port for the app |
+| `POSTGRES_PASSWORD` | `postgres` | Database password — change outside local use |
+| `ALLOWED_ORIGINS` | `http://localhost:3001,http://127.0.0.1:3001` | Origins allowed to call the API |
+| `COOKIE_SECURE` | `false` | Set `true` when served over HTTPS |
+| `TRUST_PROXY` | `false` | Set `true` behind nginx/Caddy/ALB |
+| `ALLOW_DEMO_RESET` | `false` | Enables “reset demo data” in Settings |
+
+For a real deployment put the container behind a TLS-terminating proxy and set
+`COOKIE_SECURE=true`, `TRUST_PROXY=true` and `ALLOWED_ORIGINS=https://your-domain`
+(the runtime image itself runs as the unprivileged `node` user).
+
 ---
 
 ## 7. Scripts Reference
@@ -323,6 +363,7 @@ All settings are optional; defaults are safe for local development. See `.env.ex
 | `NODE_ENV` | `development` | `production` enables fail-closed TLS warnings, static hosting, demo-reset lockout |
 | `TRUST_PROXY` | `false` | Trust `X-Forwarded-*` (set `true` behind nginx/Caddy/ALB) |
 | `ALLOWED_ORIGINS` | localhost origins | Comma-separated browser origins allowed to send credentialed requests |
+| `COOKIE_SECURE` | `true` in production/HTTPS | Mark session cookies `Secure` + `__Host-`; `false` for plain-HTTP Docker |
 | `SESSION_TTL_HOURS` | `8` | Session lifetime |
 | `BCRYPT_ROUNDS` | `12` | Password hash cost (clamped 10–14) |
 | `LOGIN_MAX_FAILURES` | `5` | Failed passwords before account lockout |

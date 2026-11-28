@@ -1,0 +1,23 @@
+node_modules
+dist
+dist-ssr
+
+.git
+.gitignore
+
+# Local database cluster / data dirs
+.pgdata
+data
+
+# Local secrets and dev certificates
+.env
+.env.*
+.certs
+
+# Tooling / editor noise
+.vscode
+.idea
+.freebuff
+logs
+*.log
+.DS_Store
